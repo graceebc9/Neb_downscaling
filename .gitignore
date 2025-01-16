@@ -4,3 +4,6 @@ graphs/
 
 # add cache to gitignore 
 .cache/
+
+# add the pycache from src
+src/__pycache__/
