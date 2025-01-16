@@ -1,0 +1,6 @@
+# add results folder to gitignore 
+results/
+graphs/
+
+# add cache to gitignore 
+.cache/
