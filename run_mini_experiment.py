@@ -152,10 +152,10 @@ def run_experiments(input_data, ld_cd, target_col='total_gas', timeout_seconds=3
     
     # Define parameter ranges
     random_seeds = [10, 50, 75, 100]
-    missing_percentages = np.arange(0.1, 1.0, 0.1)  # 10% to 90%
+    missing_percentages = np.arange(0.1, 1.2, 0.2)  # 10% to 90%
     distance_metrics = ['haversine', 'euclidean']
-    spatial_weights = np.arange(0, 1.0, 0.1)  # 0 to 1 in 0.1 increments
-    
+    spatial_weights = np.arange(0, 1.2, 0.2)  # 0 to 1 in 0.1 increments
+
     # Base feature parameters
     base_params = {
         'k': 5,
