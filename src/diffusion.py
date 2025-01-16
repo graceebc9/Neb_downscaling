@@ -101,7 +101,8 @@ def _iterative(observed, diffuser, omega, thresh=0.001, verbose=True):
         completed[~omega] += delta[~omega]
         if (count + 1) % 100 == 0:
             if verbose:
-                logging.info(f"Count: {count + 1}, magn: {np.mean(magn < magn_break)}")
+                None
+                # logging.info(f"Count: {count + 1}, magn: {np.mean(magn < magn_break)}")
         if np.mean(magn < magn_break) > 1 - thresh:
             break
         # if np.isnan(magn):

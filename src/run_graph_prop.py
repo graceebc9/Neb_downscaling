@@ -1,45 +1,68 @@
 import numpy as np 
+import logging
 import src.diffusion as diffusion 
 from src.metrics import calculate_metrics 
 
 def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, random_seed=42):
-    # set the random seed 
-    print('creating missing data')
+    """
+    Run graph propagation algorithm with missing data.
+    
+    Args:
+        target_col: Column name for target variable
+        geo_df: Geodataframe with data
+        percent_missing: Percentage of data to mask
+        adj: Adjacency matrix
+        distance: Distance metric used
+        random_seed: Random seed for reproducibility
+    
+    Returns:
+        tuple: (rmse, mae, mape, r2) metrics
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Set the random seed 
+    logger.info('Creating missing data')
     np.random.seed(random_seed)
-    og_data =  geo_df[target_col].values 
-    incomplete_postcode_data= og_data.copy()  
-    print('generating mask')  
-    # generate maks using percent_missing 
-    missing_mask = np.random.choice([0, 1], size=og_data.shape[0], p=[percent_missing, 1-percent_missing])
-    # validate that mask is correct number 
+    og_data = geo_df[target_col].values 
+    incomplete_postcode_data = og_data.copy()  
+    
+    logger.info('Generating mask')  
+    # Generate mask using percent_missing 
+    missing_mask = np.random.choice([0, 1], size=og_data.shape[0], 
+                                  p=[percent_missing, 1-percent_missing])
+    
+    # Validate that mask is correct number 
     actual_missing_percent = 1 - (missing_mask.sum() / missing_mask.shape[0])
     if abs(actual_missing_percent - percent_missing) > 0.01:  # 1% tolerance
-        print(f'Error with mask: Expected {percent_missing}, got {actual_missing_percent}')
+        logger.warning(f'Mask percentage deviation: Expected {percent_missing:.3f}, got {actual_missing_percent:.3f}')
     
     incomplete_postcode_data[missing_mask==0] = np.nan  
 
     if incomplete_postcode_data.ndim != 1:
-        print('error expecting diff dimesnions')
+        logger.error('Error: Unexpected dimensions in incomplete_postcode_data')
+        raise ValueError('incomplete_postcode_data must be 1-dimensional')
     
-    print('starting diffusion completion')
-    completed_pc_df = diffusion.graph_prop(adj, incomplete_postcode_data, missing_mask )
-    print('diffusion completion done')
+    logger.info('Starting diffusion completion')
+    completed_pc_df = diffusion.graph_prop(adj, incomplete_postcode_data, missing_mask)
+    logger.info('Diffusion completion finished')
 
-    # check if all above 0  for completed_pc_df 
+    # Check if all values are above 0 for completed_pc_df 
     if not (completed_pc_df > 0).all():
-        print('error in completed_pc_df')
+        logger.error('Error: Negative or zero values found in completed_pc_df')
+        raise ValueError('Completed data contains invalid values')
 
-
-    print('calculating metrics')
+    logger.info('Calculating metrics')
     missing_data_subset = og_data[missing_mask==0]
     filled_subset = completed_pc_df[missing_mask==0]
 
-
     y_true = missing_data_subset
     y_pred = filled_subset 
-    print(f'The errors for filling target col: {target_col} with spatial graph on {distance} distance are:')
+    
+    logger.info(f'Computing errors for target column {target_col} with {distance} distance')
     rmse, mae, mape, r2 = calculate_metrics(y_true, y_pred)
-    print('experiment complete')
+    
+    # Log the metrics
+    logger.info(f'Metrics - RMSE: {rmse:.4f}, MAE: {mae:.4f}, MAPE: {mape:.4f}, R2: {r2:.4f}')
+    
+    logger.info('Experiment complete')
     return rmse, mae, mape, r2
-
-
