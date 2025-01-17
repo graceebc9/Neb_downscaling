@@ -4,7 +4,7 @@ from sklearn.neighbors import kneighbors_graph
 from scipy.spatial.distance import cdist
 
 
-def spatial_neighbor_graph(df, lat_col='latitude', lon_col='longitude', k=10, distance_metric='haversine'):
+def spatial_neighbor_graph(df, k,  distance_metric,  lat_col='latitude', lon_col='longitude'):
     """
     Build a spatial neighbor graph from GIS data where nodes are connected based on geographic proximity.
     

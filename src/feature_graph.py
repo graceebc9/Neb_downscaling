@@ -18,8 +18,7 @@ def haversine_distance(X):
             
             return R * c
 
-def spatial_feature_neighbor_graph(df, feature_cols, lat_col='latitude', lon_col='longitude', 
-                                 k=10, spatial_weight=0.7, distance_metric='haversine'):
+def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, distance_metric, lat_col='latitude', lon_col='longitude'):
     """
     Build a spatial neighbor graph that considers both geographic proximity and feature similarity.
     

@@ -21,7 +21,7 @@ def generate_graph_id(graph_params):
     param_str = json.dumps(graph_params, sort_keys=True)
     return hashlib.md5(param_str.encode()).hexdigest()[:10]
 
-def get_graph(dataset_name, geo_df, graph_fn, graph_params=None, cache_dir='graphs'):
+def get_graph(dataset_name, geo_df, graph_fn, k, graph_params=None, cache_dir='graphs'):
     """
     Get or create a graph using the specified graph generation function and parameters.
     
@@ -75,7 +75,7 @@ def get_graph(dataset_name, geo_df, graph_fn, graph_params=None, cache_dir='grap
     
     # Generate new graph
     print(f"Generating new graph with {graph_fn.__name__}")
-    graph = graph_fn(geo_df, **graph_params)
+    graph = graph_fn(geo_df, k, **graph_params)
     
     # Cache the graph and its parameters
     sp.save_npz(cache_file, graph)
