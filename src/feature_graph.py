@@ -45,8 +45,12 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, distance
         Adjacency matrix representing the combined spatial-feature neighbor graph
     """
     logging.info(f"Building spatial-feature graph using k={k} nearest neighbours.")
-    
+    # Extract coordinates and features
+    coords = df[[lat_col, lon_col]].values
+    features = df[feature_cols].values
+   
     # Input validation
+
     required_cols = [lat_col, lon_col] + feature_cols
     if not all(col in df.columns for col in required_cols):
         msg = f"Missing required columns. Expected {required_cols}. Have {df.columns}"
@@ -63,9 +67,19 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, distance
         logging.error(msg)
         raise ValueError(msg)
     
-    # Extract coordinates and features
-    coords = df[[lat_col, lon_col]].values
-    features = df[feature_cols].values
+    # Check for NaN values in input data
+    if np.any(np.isnan(coords)) or np.any(np.isnan(features)):
+        msg = "Input data contains NaN values. Please handle missing values before creating the graph."
+        logging.error(msg)
+        raise ValueError(msg)
+    
+
+
+    # Check if points are completely identical (both spatial and features)
+    if (np.all(coords == coords[0]) and np.all(features == features[0])):
+        msg = "All points have identical coordinates and features. Cannot create meaningful graph."
+        logging.warning(msg)
+        raise ValueError(msg)
     
     # Normalize features
     scaler = StandardScaler()
@@ -78,10 +92,21 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, distance
         spatial_distances = haversine_distance(coords_rad)
     else:
         spatial_distances = cdist(coords, coords, metric='euclidean')
+
+    # Replace any NaN values in spatial distances with large values
+    spatial_distances = np.nan_to_num(spatial_distances, nan=np.nanmax(spatial_distances) if np.any(~np.isnan(spatial_distances)) else 1.0)
     
     # Calculate feature distances using cosine similarity
     feature_distances = cdist(features_normalized, features_normalized, metric='cosine')
+    # Replace any NaN values in feature distances with large values
+    feature_distances = np.nan_to_num(feature_distances, nan=np.nanmax(feature_distances) if np.any(~np.isnan(feature_distances)) else 1.0)
     
+    # If all spatial distances are zero but features differ, 
+    # rely entirely on feature distances by setting spatial_weight to 0
+    if np.all(spatial_distances == 0) and not np.all(feature_distances == 0):
+        logging.info("All spatial distances are zero but features differ. Using only feature distances.")
+        spatial_weight = 0
+
     # Normalize distance matrices to [0, 1] range
     spatial_distances = spatial_distances / np.max(spatial_distances)
     feature_distances = feature_distances / np.max(feature_distances)

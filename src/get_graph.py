@@ -7,6 +7,7 @@ def generate_graph_id(graph_params):
     """
     Generate a unique identifier for a graph based on its parameters.
     
+
     Parameters:
     -----------
     graph_params : dict
@@ -55,6 +56,7 @@ def get_graph(dataset_name, geo_df, graph_fn, k, graph_params=None, cache_dir='g
         'dataset': dataset_name,
         'n_rows': len(geo_df),
         'graph_fn': graph_fn.__name__,
+        'k' : k,   
         **graph_params
     }
     graph_id = generate_graph_id(params_for_id)
