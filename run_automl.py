@@ -105,7 +105,7 @@ def main():
                                                                 presets=model_preset,
                                                                 excluded_model_types=excl_models)
     
-    test_data = transform(TabularDataset(test_data), label, column_setting, setting_dir)
+    test_data = transform(TabularDataset(test_data), label, cols)
     test_data.to_csv(os.path.join(output_directory, 'test_data.csv'), index=False)
     y_pred = predictor.predict(test_data.drop(columns=[label]))
     results = predictor.evaluate_predictions(y_true=test_data[label], y_pred=y_pred, auxiliary_metrics=True)
