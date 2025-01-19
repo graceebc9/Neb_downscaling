@@ -59,7 +59,7 @@ def save_results(results, run_name, prefix="checkpoint"):
         metadata = {
             'run_name': run_name,
             'start_time': timestamp,
-            'last_update': timestamp
+            'last_update': timestamp,
         }
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
