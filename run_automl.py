@@ -66,7 +66,7 @@ def main():
     
 
     
-    df = pd.read_csv(data_path)
+    df = pd.read_csv(data_path)   
     dataset_name = os.path.basename(data_path).split('.')[0].split('_tr')[0]
 
     loc_type= 'global'
@@ -74,11 +74,11 @@ def main():
     train_data, test_data = train_test_split(df, test_size=0.2, random_state=42)
     train_data = transform(TabularDataset(train_data), label, cols)
         
-    print(f'starting model run for {loc_type} target {label}, time lim {time_limit}, col setting {column_setting}, model preset {model_preset} and train subset {train_subset_prop}' )
+    print(f'starting model run for {loc_type} target {label}, time lim {time_limit}, model preset {model_preset} and train subset {train_subset_prop}' )
 
 
     
-    output_directory = f"{output_path}/{dataset_name}__{loc_type}__{label}__{time_limit}__colset_{column_setting}__{model_preset}___tsp_{train_subset_prop}__{model_types}__{region_id}"
+    output_directory = f"{output_path}/{dataset_name}__{loc_type}__{label}__{time_limit}__{model_preset}___tsp_{train_subset_prop}"
     required_files = ['model_summary.txt']  # List of files you expect to exist
     
     
