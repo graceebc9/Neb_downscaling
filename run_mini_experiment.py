@@ -1,3 +1,4 @@
+import os 
 import itertools
 import json
 from datetime import datetime
@@ -8,7 +9,10 @@ from pathlib import Path
 import time 
 import hashlib
 
-
+# def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, 
+#                                  distance_method='linear', distance_metric='haversine',
+#                                  lat_col='latitude', lon_col='longitude', k_density=3):
+    
 from src.get_graph import get_graph
 from src.run_graph_prop import run_graph_prop
 from src.feature_graph import spatial_feature_neighbor_graph 
@@ -32,23 +36,16 @@ def create_experiment_params(ld_cd, target_col='total_gas', feature_cols=None):
         'ld_cd': str(ld_cd),
         'target_col': str(target_col),
         'feature_cols': list(feature_cols),
-        'random_seeds': [int(x) for x in [10, 50, 75, 100, 125, 400, 432, 589]],
-        'missing_percentages': [float(x) for x in np.arange(0.1, 1.0, 0.1).tolist()],
-        'distance_metrics': ['euclidean'],
-        'spatial_weights': [float(x) for x in np.arange(0, 1.1,  0.1).tolist()],
-        'k_options': [int(x) for x in np.arange(5, 55, 5).tolist()] + [9,11,12,13,14,16,17]
+        'random_seeds': [int(x) for x in [ 125, 400, 432, 589]],
+        'missing_percentages': [float(x) for x in np.arange(0.1, 1, 0.2).tolist()],
+        'distance_metrics': ['euclidean', 'haversine'],
+        'distance_method' : ['linear', 'adaptive'] , 
+        # 'spatial_weights': [float(x) for x in np.arange(0, 1.1,  0.1).tolist()],
+        'spatial_weights': [0, 0.1, 0.7 , 0.9 ],
+        'k_options': [int(x) for x in np.arange(5, 55, 10).tolist()] + [9,11,12,13,14,16,17]
     }
 
-    # params = {
-    #     'ld_cd': str(ld_cd),
-    #     'target_col': str(target_col),
-    #     'feature_cols': list(feature_cols),
-    #     'random_seeds': [4], 
-    #     'missing_percentages': [0.1], 
-    #     'distance_metrics': ['euclidean'],
-    #     'spatial_weights': [0.5], 
-    #     'k_options': [3,5,10,12,15 ] 
-    # }
+
     return params
 
 def run_experiments(input_data, experiment_params, timeout_seconds=300):
@@ -70,6 +67,7 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
         experiment_params['random_seeds'],
         experiment_params['missing_percentages'],
         experiment_params['distance_metrics'],
+        experiment_params['distance_method'],
         experiment_params['spatial_weights'],
         experiment_params['k_options']
     ))
@@ -86,20 +84,20 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
     
     # Base feature parameters
     base_params = {
-        'feature_cols': experiment_params['feature_cols']
+        'feature_cols': experiment_params['feature_cols'], 
     }
     
     try:
         # Run experiments
-        for index, (rs, missing_pct, distance, weight, k) in enumerate(param_combinations, 1):
+        for index, (rs, missing_pct, distance_metric, distance_method, weight, k) in enumerate(param_combinations, 1):
             start_time = time.time()
             logger.info(f"Experiment {index}/{total_experiments} ({(index/total_experiments)*100:.1f}%)")
-            logger.info(f"Parameters: seed={rs}, missing={missing_pct:.2f}, distance={distance}, weight={weight:.2f}, k={k}")
+            logger.info(f"Parameters: seed={rs}, missing={missing_pct:.2f}, metric:{distance_metric}, distance_method={distance_method}, weight={weight:.2f}, k={k}")
             
             # Update feature parameters
             feature_params = base_params.copy()
             feature_params.update({
-                'distance_metric': distance,
+                'distance_method': distance_method,
                 'spatial_weight': weight
             })
             
@@ -121,7 +119,8 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
                         input_data,
                         missing_pct,
                         feature_graph,
-                        distance,
+                        distance_metric,
+                        distance_method,
                         random_seed=rs
                     )
                     
@@ -129,7 +128,8 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
                     result = {
                         'random_seed': rs,
                         'missing_percentage': missing_pct,
-                        'distance_metric': distance,
+                        'distance_metric': distance_metric,
+                        'distance_method': distance_method,
                         'spatial_weight': weight,
                         'k': k,
                         'rmse': rmse,
@@ -155,7 +155,8 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
                 result = {
                     'random_seed': rs,
                     'missing_percentage': missing_pct,
-                    'distance_metric': distance,
+                    'distance_metric': distance_metric,
+                    'distance_method': distance_method,
                     'spatial_weight': weight,
                     'k': k,
                     'error': str(e),
@@ -178,7 +179,8 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
 
 if __name__ == "__main__":
     # Define experiment parameters
-    ld_cd = 'E06000060'
+    # ld_cd = 'E06000060'
+    ld_cd='E06000052'
     experiment_params = create_experiment_params(ld_cd)
 
     # Load data
@@ -188,6 +190,11 @@ if __name__ == "__main__":
     # if local
     pc_path='/Volumes/T9/2024_Data_downloads/codepoint_polygons_edina/Download_all_postcodes_2378998'
     df_path = '/Users/gracecolverd/NebulaDataset/final_dataset/NEBULA_englandwales_domestic_filtered.csv'
+    run_name = generate_run_name(experiment_params)
+    # dump params to json 
+    os.makedirs(f'results/{run_name}', exist_ok=True)
+    with open(f'results/{run_name}/experiment_params.json', 'w') as f:
+        json.dump(experiment_params, f, indent=2)
     
     df = pd.read_csv(df_path) 
     df = create_geo_df(df, pc_path)
@@ -196,10 +203,7 @@ if __name__ == "__main__":
     
     # Run experiments
     results, run_name = run_experiments(geo_df, experiment_params)
-    # dump params to json 
-    with open(f'results/{run_name}/experiment_params.json', 'w') as f:
-        json.dump(experiment_params, f, indent=2)
-    
+
     # Create analysis DataFrame
     logger = logging.getLogger(__name__)
     logger.info("Creating analysis dataframe")
