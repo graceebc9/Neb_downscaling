@@ -4,160 +4,169 @@ from sklearn.neighbors import kneighbors_graph
 from sklearn.preprocessing import StandardScaler
 import logging
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Constants
+EPSILON = 1e-8
+MIN_POINTS = 100
 
 def haversine_distance(X):
-            R = 6371.0  # Earth radius in kilometers
-            lat1, lon1 = X[:, 0:1], X[:, 1:2]
-            lat2, lon2 = X[:, 0], X[:, 1]
-            
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-            
-            a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
-            c = 2 * np.arcsin(np.sqrt(a))
-            
-            return R * c
+    """Calculate haversine distance for geographic coordinates in radians."""
+    R = 6371.0  # Earth radius in kilometers
+    lat1, lon1 = X[:, 0:1], X[:, 1:2]
+    lat2, lon2 = X[:, 0], X[:, 1]
+    
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    
+    return R * c
 
-def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, distance_metric, lat_col='latitude', lon_col='longitude'):
+def calculate_local_density(spatial_distances, k):
     """
-    Build a spatial neighbor graph that considers both geographic proximity and feature similarity.
+    Calculate local density using k nearest neighbors.
     
     Parameters:
     -----------
-    df : pandas.DataFrame
-        DataFrame containing the GIS data with latitude, longitude and feature columns
-    feature_cols : list
-        List of column names containing the features to consider for similarity
-    lat_col : str, default='latitude'
-        Name of the latitude column
-    lon_col : str, default='longitude'
-        Name of the longitude column
-    k : int, default=10
-        Number of nearest neighbors to consider for each point
-    spatial_weight : float, default=0.7
-        Weight given to spatial distance (1 - spatial_weight = feature weight)
-    distance_metric : str, default='haversine'
-        Distance metric to use for spatial distance. Options: 'haversine', 'euclidean'
+    spatial_distances : np.ndarray
+        Matrix of spatial distances
+    k : int
+        Number of neighbors for density calculation
     
     Returns:
     --------
-    scipy.sparse.csr_matrix
-        Adjacency matrix representing the combined spatial-feature neighbor graph
+    np.ndarray
+        Local density for each point
     """
-    logging.info(f"Building spatial-feature graph using k={k} nearest neighbours.")
-    # Extract coordinates and features
-    coords = df[[lat_col, lon_col]].values
-    features = df[feature_cols].values
-   
-    # Input validation
+    # Add epsilon to prevent division by zero
+    spatial_distances = spatial_distances + EPSILON
+    
+    # Get k nearest neighbor distances
+    local_radii = np.sort(spatial_distances, axis=1)[:, k]
+    
+    # Calculate density (points per unit area)
+    local_densities = k / (np.pi * local_radii**2)
+    
+    # Clip densities to reasonable range
+    return np.clip(local_densities, 0.1, 10)
 
-    required_cols = [lat_col, lon_col] + feature_cols
-    if not all(col in df.columns for col in required_cols):
-        msg = f"Missing required columns. Expected {required_cols}. Have {df.columns}"
-        logging.error(msg)
-        raise ValueError(msg)
+def compute_combined_distances(spatial_distances, feature_distances, spatial_weight, 
+                             method='linear', k_density=3):
+    """
+    Compute combined distances using either linear or adaptive weighting.
     
-    if k >= len(df):
-        msg = f"k must be less than the number of points ({len(df)})"
-        logging.error(msg)
-        raise ValueError(msg)
-        
-    if not 0 <= spatial_weight <= 1:
-        msg = "spatial_weight must be between 0 and 1"
-        logging.error(msg)
-        raise ValueError(msg)
+    Parameters:
+    -----------
+    spatial_distances : np.ndarray
+        Matrix of spatial distances
+    feature_distances : np.ndarray
+        Matrix of feature distances
+    spatial_weight : float
+        Base weight for spatial distances (0-1)
+    method : str
+        'linear' or 'adaptive'
+    k_density : int
+        Number of neighbors for density in adaptive method
+    """
+    # Check for very small spatial distances
+    if np.all(spatial_distances < EPSILON):
+        logger.info("All spatial distances very small. Using only feature distances.")
+        return feature_distances
     
-    # Check for NaN values in input data
-    if np.any(np.isnan(coords)) or np.any(np.isnan(features)):
-        msg = "Input data contains NaN values. Please handle missing values before creating the graph."
-        logging.error(msg)
-        raise ValueError(msg)
+    # Add epsilon to spatial distances
+    spatial_distances = spatial_distances + EPSILON
     
-
-
-    # Check if points are completely identical (both spatial and features)
-    if (np.all(coords == coords[0]) and np.all(features == features[0])):
-        msg = "All points have identical coordinates and features. Cannot create meaningful graph."
-        logging.warning(msg)
-        raise ValueError(msg)
-    
-    # Normalize features
-    scaler = StandardScaler()
-    features_normalized = scaler.fit_transform(features)
-    
-    # Calculate spatial distances
-    if distance_metric == 'haversine':
-        coords_rad = np.radians(coords)
-        
-        spatial_distances = haversine_distance(coords_rad)
-    else:
-        spatial_distances = cdist(coords, coords, metric='euclidean')
-
-    # Replace any NaN values in spatial distances with large values
-    spatial_distances = np.nan_to_num(spatial_distances, nan=np.nanmax(spatial_distances) if np.any(~np.isnan(spatial_distances)) else 1.0)
-    
-    # Calculate feature distances using cosine similarity
-    feature_distances = cdist(features_normalized, features_normalized, metric='cosine')
-    # Replace any NaN values in feature distances with large values
-    feature_distances = np.nan_to_num(feature_distances, nan=np.nanmax(feature_distances) if np.any(~np.isnan(feature_distances)) else 1.0)
-    
-    # If all spatial distances are zero but features differ, 
-    # rely entirely on feature distances by setting spatial_weight to 0
-    if np.all(spatial_distances == 0) and not np.all(feature_distances == 0):
-        logging.info("All spatial distances are zero but features differ. Using only feature distances.")
-        spatial_weight = 0
-
-    # Normalize distance matrices to [0, 1] range
+    # Normalize distances to [0, 1]
     spatial_distances = spatial_distances / np.max(spatial_distances)
     feature_distances = feature_distances / np.max(feature_distances)
     
-    # Combine spatial and feature distances
-    combined_distances = (spatial_weight * spatial_distances + 
-                        (1 - spatial_weight) * feature_distances)
+    if method == 'linear':
+        return (spatial_weight * spatial_distances + 
+                (1 - spatial_weight) * feature_distances)
     
-    # Create k-nearest neighbors graph
-    a = kneighbors_graph(combined_distances, k, mode='distance', include_self=False)
+    elif method == 'adaptive':
+        # Calculate local density for each point
+        local_densities = calculate_local_density(spatial_distances, k=k_density)
+        
+        # Log density statistics
+        logger.debug(f"Density stats - Mean: {np.mean(local_densities):.3f}, "
+                    f"Std: {np.std(local_densities):.3f}")
+        
+        # Compute adaptive weights for each point
+        adaptive_weights = spatial_weight / (1 + local_densities.reshape(-1, 1))
+        
+        # Log weight adjustments
+        logger.debug(f"Weight adjustment - Mean: {np.mean(adaptive_weights):.3f}, "
+                    f"Min: {np.min(adaptive_weights):.3f}")
+        
+        # Compute distances with point-specific weights
+        combined_distances = np.zeros_like(spatial_distances)
+        for i in range(len(spatial_distances)):
+            combined_distances[i] = (adaptive_weights[i] * spatial_distances[i] + 
+                                   (1 - adaptive_weights[i]) * feature_distances[i])
+        return combined_distances
     
-    # Make the graph symmetric (undirected)
-    a = a + a.T
-    
-    # Binarize the graph (1 for connected, 0 for not connected)
-    a = (a > 0).astype(int)
-    
-    # Remove double edges
-    a[a > 1] = 1
-    
-    return a
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
-def calculate_edge_weights(df, adj_matrix, feature_cols, lat_col='latitude', lon_col='longitude',
-                         spatial_weight=0.7, distance_metric='haversine'):
+def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, 
+                                 distance_method='linear', distance_metric='haversine',
+                                 lat_col='latitude', lon_col='longitude', k_density=3):
     """
-    Calculate edge weights for existing connections in the graph based on 
-    combined spatial and feature distances.
+    Build a spatial neighbor graph considering both geographic proximity and feature similarity.
     
     Parameters:
     -----------
     df : pandas.DataFrame
-        DataFrame containing the GIS data with latitude, longitude and feature columns
-    adj_matrix : scipy.sparse.csr_matrix
-        Adjacency matrix representing the graph structure
+        DataFrame containing GIS data
+    k : int
+        Number of nearest neighbors for final graph
     feature_cols : list
-        List of column names containing the features to consider for similarity
-    lat_col, lon_col : str
-        Names of the latitude and longitude columns
+        List of feature column names
     spatial_weight : float
-        Weight given to spatial distance in the combined metric
+        Weight given to spatial distance (0-1)
+    distance_method : str
+        'linear' or 'adaptive'
     distance_metric : str
-        Distance metric to use for spatial distance
-        
+        'haversine' or 'euclidean'
+    lat_col, lon_col : str
+        Names of latitude and longitude columns
+    k_density : int
+        Number of neighbors for density calculation
+    
     Returns:
     --------
     scipy.sparse.csr_matrix
-        Weighted adjacency matrix
+        Binary adjacency matrix of the neighbor graph
     """
-    # Extract coordinates and features
+    # Validate inputs
+    if len(df) < MIN_POINTS:
+        raise ValueError(f"Dataset too small. Need at least {MIN_POINTS} points.")
+    
+    if k_density >= k:
+        raise ValueError("k_density must be less than k")
+    
+    if k >= len(df):
+        raise ValueError(f"k ({k}) must be less than n_points ({len(df)})")
+    
+    if not 0 <= spatial_weight <= 1:
+        raise ValueError("spatial_weight must be between 0 and 1")
+    
+    # Check columns
+    required_cols = [lat_col, lon_col] + feature_cols
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Missing columns. Need {required_cols}")
+    
+    # Extract and check data
     coords = df[[lat_col, lon_col]].values
     features = df[feature_cols].values
+    
+    if np.any(np.isnan(coords)) or np.any(np.isnan(features)):
+        raise ValueError("Input contains NaN values")
     
     # Normalize features
     scaler = StandardScaler()
@@ -171,17 +180,34 @@ def calculate_edge_weights(df, adj_matrix, feature_cols, lat_col='latitude', lon
         spatial_distances = cdist(coords, coords, metric='euclidean')
     
     # Calculate feature distances
-    feature_distances = cdist(features_normalized, features_normalized, metric='cosine')
+    feature_distances = cdist(features_normalized, features_normalized, 
+                            metric='cosine')
     
-    # Normalize distances
-    spatial_distances = spatial_distances / np.max(spatial_distances)
-    feature_distances = feature_distances / np.max(feature_distances)
+    # Check for spatial clustering
+    spatial_range = np.max(spatial_distances) - np.min(spatial_distances)
+    if spatial_range < EPSILON:
+        logger.info(f"Spatial range ({spatial_range:.2e}) very small. "
+                   "Reducing spatial weight influence.")
+        spatial_weight *= 0.1
     
-    # Calculate combined distances
-    combined_distances = (spatial_weight * spatial_distances + 
-                        (1 - spatial_weight) * feature_distances)
+    # Compute combined distances
+    combined_distances = compute_combined_distances(
+        spatial_distances, feature_distances,
+        spatial_weight, method=distance_method,
+        k_density=k_density
+    )
     
-    # Create weighted adjacency matrix
-    weighted_adj = adj_matrix.multiply(combined_distances)
+    # Create k-nearest neighbors graph
+    adj_matrix = kneighbors_graph(combined_distances, k, mode='distance',
+                                 include_self=False)
     
-    return weighted_adj
+    # Make symmetric and binary
+    adj_matrix = (adj_matrix + adj_matrix.T > 0).astype(int)
+    
+    # Log graph statistics
+    n_edges = adj_matrix.sum() // 2
+    avg_degree = adj_matrix.sum() / len(df)
+    logger.info(f"Graph created with {n_edges} edges. "
+               f"Average degree: {avg_degree:.2f}")
+    
+    return adj_matrix
