@@ -3,7 +3,7 @@ import logging
 import src.diffusion as diffusion 
 from src.metrics import calculate_metrics 
 
-def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, random_seed=42):
+def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, d_method, random_seed=42):
     """
     Run graph propagation algorithm with missing data.
     
@@ -13,6 +13,7 @@ def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, random_se
         percent_missing: Percentage of data to mask
         adj: Adjacency matrix
         distance: Distance metric used
+        d_method; kind of distance method (linear or adaptive)
         random_seed: Random seed for reproducibility
     
     Returns:
