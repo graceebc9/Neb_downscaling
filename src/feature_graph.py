@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 EPSILON = 1e-8
 MIN_POINTS = 100
 
+
 def haversine_distance(X):
     """Calculate haversine distance for geographic coordinates in radians."""
     R = 6371.0  # Earth radius in kilometers
@@ -85,7 +86,7 @@ def compute_combined_distances(spatial_distances, feature_distances, spatial_wei
     feature_distances = feature_distances / np.max(feature_distances)
     
     if method == 'linear':
-        return (spatial_weight * spatial_distances + 
+        return ((spatial_weight * spatial_distances) + 
                 (1 - spatial_weight) * feature_distances)
     
     elif method == 'adaptive':
@@ -115,7 +116,7 @@ def compute_combined_distances(spatial_distances, feature_distances, spatial_wei
 
 def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, 
                                  distance_method='linear', distance_metric='haversine',
-                                 lat_col='latitude', lon_col='longitude', k_density=3):
+                                 lat_col='latitude', lon_col='longitude', k_density=3, debug = False ):
     """
     Build a spatial neighbor graph considering both geographic proximity and feature similarity.
     
@@ -132,7 +133,7 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight,
     distance_method : str
         'linear' or 'adaptive'
     distance_metric : str
-        'haversine' or 'euclidean'
+        'haversine' or 'euclidean' - for spatial distance metric only 
     lat_col, lon_col : str
         Names of latitude and longitude columns
     k_density : int
@@ -181,7 +182,7 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight,
     
     # Calculate feature distances
     feature_distances = cdist(features_normalized, features_normalized, 
-                            metric='cosine')
+                            metric='euclidean')
     
     # Check for spatial clustering
     spatial_range = np.max(spatial_distances) - np.min(spatial_distances)
@@ -209,5 +210,14 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight,
     avg_degree = adj_matrix.sum() / len(df)
     logger.info(f"Graph created with {n_edges} edges. "
                f"Average degree: {avg_degree:.2f}")
+    
+    if debug: 
+        debug_info = {}
+        debug_info['spatial_distances'] = spatial_distances
+        debug_info['feature_distances_norm'] = feature_distances
+        debug_info['combined_distances'] = combined_distances
+        debug_info['coords'] = coords
+        
+        return adj_matrix, debug_info
     
     return adj_matrix

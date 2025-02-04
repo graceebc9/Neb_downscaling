@@ -3,7 +3,7 @@ import logging
 import src.diffusion as diffusion 
 from src.metrics import calculate_metrics 
 
-def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, d_method, random_seed=42):
+def run_graph_prop(target_col, geo_df, percent_missing, adj, distance_metric, d_method, random_seed=42):
     """
     Run graph propagation algorithm with missing data.
     
@@ -12,7 +12,7 @@ def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, d_method,
         geo_df: Geodataframe with data
         percent_missing: Percentage of data to mask
         adj: Adjacency matrix
-        distance: Distance metric used
+        distance_metric: Distance metric used
         d_method; kind of distance method (linear or adaptive)
         random_seed: Random seed for reproducibility
     
@@ -59,7 +59,7 @@ def run_graph_prop(target_col, geo_df, percent_missing, adj, distance, d_method,
     y_true = missing_data_subset
     y_pred = filled_subset 
     
-    logger.info(f'Computing errors for target column {target_col} with {distance} distance')
+    logger.info(f'Computing errors for target column {target_col} with {distance_metric} distance, and method {d_method}')
     rmse, mae, mape, r2 = calculate_metrics(y_true, y_pred)
     
     # Log the metrics

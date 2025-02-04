@@ -1,10 +1,12 @@
 import pandas as pd 
 from src.utils import load_pc_shp
 
-def load_geodf(nrows):
+def load_geodf(nrows, hpc=False):
     df = pd.read_csv('/Users/gracecolverd/NebulaDataset/final_dataset/NEBULA_englandwales_domestic_filtered.csv', nrows=nrows)
     pcs_load = df.postcode.str[0:2].unique().tolist()
     pcs_load = df.postcode.str.extract('([A-Z]+)').iloc[:,0].unique().tolist()
+    if hpc:
+        pcs_load= [x.lower() for x in pcs_load]
     print(pcs_load)
     pc_shp = load_pc_shp(pcs_load)
 
