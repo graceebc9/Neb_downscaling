@@ -225,7 +225,7 @@ if __name__ == "__main__":
         json.dump(experiment_params, f, indent=2)
     
     df = pd.read_csv(df_path) 
-    df = create_geo_df(df, pc_path)
+    df = create_geo_df(df, pc_path, hpc )
     if filt_type == 'ladcd': 
         geo_df = df[df['ladcd']==code].copy()
     elif filt_type =='region':
