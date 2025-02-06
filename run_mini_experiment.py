@@ -1,3 +1,4 @@
+import geopandas as gpd 
 import os 
 import itertools
 import json
@@ -29,20 +30,44 @@ def create_experiment_params(ld_cd, target_col='total_gas', feature_cols=None):
     Ensures all values are JSON serializable
     """
     if feature_cols is None:
-        feature_cols = ['avg_gas', 'all_types_total_buildings']
+        # feature_cols = ['avg_gas', 'all_types_']
+        feature_cols = [ 'all_res_total_fl_area_H_total',
+                        'Pre 1919_pct',
+                        'Standard size detached_pct',
+                        'postcode_area',
+                        'HDD_winter',  
+                        'economic_activity_perc_Economically active (excluding full-time students): In employment: Employee: Full-time',
+                        'ethnic_group_perc_White: English, Welsh, Scottish, Northern Irish or British',
+                        'socio_class_perc_L1, L2 and L3: Higher managerial, administrative and professional occupations',
+                        'household_comp_perc_One-person household',
+                        'Domestic outbuilding_pct',
+                        '3-4 storey and smaller flats_pct',
+                        ] 
         
     # Convert numpy arrays to lists and ensure all numbers are native Python types
+    # params = {
+    #     'ld_cd': str(ld_cd),
+    #     'target_col': str(target_col),
+    #     'feature_cols': list(feature_cols),
+    #     'random_seeds': [int(x) for x in [ 125, 400, 120, 432, 589]],
+    #     'missing_percentages': [float(x) for x in np.arange(0.1, 1, 0.2).tolist()],
+    #     'distance_metrics': ['euclidean'],
+    #     'distance_method' : ['linear', 'adaptive'] , 
+    #     # 'spatial_weights': [float(x) for x in np.arange(0, 1.1,  0.1).tolist()],
+    #     'spatial_weights': [0, 0., 0.5,  0.7 , 0.9 ],
+    #     'k_options': [int(x) for x in np.arange(5, 55, 10).tolist()] + [9,11,12,13,14,16,17, 32, 35]
+    # }
     params = {
         'ld_cd': str(ld_cd),
         'target_col': str(target_col),
         'feature_cols': list(feature_cols),
-        'random_seeds': [int(x) for x in [ 125, 400, 432, 589]],
-        'missing_percentages': [float(x) for x in np.arange(0.1, 1, 0.2).tolist()],
-        'distance_metrics': ['euclidean', 'haversine'],
-        'distance_method' : ['linear', 'adaptive'] , 
+        'random_seeds': [int(x) for x in [ 125, 400, 120, 432, 589, 45,67,89,10 ]],
+        'missing_percentages': [0.2], 
+        'distance_metrics': ['euclidean'],
+        'distance_method' : [ 'adaptive'] , 
         # 'spatial_weights': [float(x) for x in np.arange(0, 1.1,  0.1).tolist()],
-        'spatial_weights': [0, 0.1, 0.7 , 0.9 ],
-        'k_options': [int(x) for x in np.arange(5, 55, 10).tolist()] + [9,11,12,13,14,16,17]
+        'spatial_weights': [0.7], 
+        'k_options': [1,2,3,4,5,6,7,8,9,10,11,12,13,14, 15,25,35,45,55] 
     }
 
 
@@ -180,27 +205,34 @@ def run_experiments(input_data, experiment_params, timeout_seconds=300):
 if __name__ == "__main__":
     # Define experiment parameters
     # ld_cd = 'E06000060'
-    ld_cd='E06000052'
-    experiment_params = create_experiment_params(ld_cd)
-
+    # ld_cd='E06000052'
+    code='E08000025'
+    code = 'NW'
+    filt_type='region'
+    experiment_params = create_experiment_params(code)
+    hpc = False 
     # Load data
-    # if hpc 
-    # pc_path = '/home/gb669/rds/hpc-work/energy_map/data/postcode_polygons'
-    # df_path = '/home/gb669/rds/hpc-work/energy_map/data/automl_models/input_data/new_final/NEBULA_englandwales_domestic_filtered.csv'
-    # if local
-    pc_path='/Volumes/T9/2024_Data_downloads/codepoint_polygons_edina/Download_all_postcodes_2378998'
-    df_path = '/Users/gracecolverd/NebulaDataset/final_dataset/NEBULA_englandwales_domestic_filtered.csv'
+    if hpc== True: 
+        pc_path = '/home/gb669/rds/hpc-work/energy_map/data/postcode_polygons'
+        df_path = '/home/gb669/rds/hpc-work/energy_map/data/automl_models/input_data/new_final/NEBULA_englandwales_domestic_filtered.csv'
+    else:
+        pc_path='/Volumes/T9/2024_Data_downloads/codepoint_polygons_edina/Download_all_postcodes_2378998'
+        df_path = '/Users/gracecolverd/NebulaDataset/final_dataset/NEBULA_englandwales_domestic_filtered.csv'
+    
     run_name = generate_run_name(experiment_params)
-    # dump params to json 
     os.makedirs(f'results/{run_name}', exist_ok=True)
     with open(f'results/{run_name}/experiment_params.json', 'w') as f:
         json.dump(experiment_params, f, indent=2)
     
     df = pd.read_csv(df_path) 
     df = create_geo_df(df, pc_path)
+    if filt_type == 'ladcd': 
+        geo_df = df[df['ladcd']==code].copy()
+    elif filt_type =='region':
+        geo_df = df[df['region']==code].copy()
     
-    geo_df = df[df['ladcd']==ld_cd].copy()
-    
+    geo_df.fillna(0, inplace=True)  
+    # geo_df = gpd.read_file('/Users/gracecolverd/Neb_downscaling/notebooks/geo_df_excl_outliers.shp')
     # Run experiments
     results, run_name = run_experiments(geo_df, experiment_params)
 

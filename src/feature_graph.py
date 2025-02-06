@@ -3,7 +3,7 @@ from scipy.spatial.distance import cdist
 from sklearn.neighbors import kneighbors_graph
 from sklearn.preprocessing import StandardScaler
 import logging
-
+from sklearn.preprocessing import QuantileTransformer
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -114,9 +114,58 @@ def compute_combined_distances(spatial_distances, feature_distances, spatial_wei
     else:
         raise ValueError(f"Unknown method: {method}")
 
+
+def normalize_features(features, feature_cols, scaler_type='standard'):
+    """
+    Normalize features with different methods per column.
+    
+    Parameters:
+    -----------
+    features : np.ndarray
+        Feature array to normalize
+    feature_cols : list
+        List of feature column names
+    scaler_type : str or dict
+        Either a string for global scaling or dict mapping column names to scaling types
+    """
+    features_normalized = np.zeros_like(features)
+    
+    if isinstance(scaler_type, str):
+        if scaler_type == 'standard':
+            scaler = StandardScaler()
+            return scaler.fit_transform(features)
+        elif scaler_type == 'log':
+            return np.log1p(features)
+        elif scaler_type =='quantile':
+            qt = QuantileTransformer(output_distribution='normal')
+            return qt.fit_transform(features )
+
+    
+    elif isinstance(scaler_type, dict):
+        for i, col in enumerate(feature_cols):
+            if scaler_type.get(col) == 'standard':
+                scaler = StandardScaler()
+                features_normalized[:, i] = scaler.fit_transform(features[:, i].reshape(-1, 1)).ravel()
+            elif scaler_type.get(col) == 'log':
+                features_normalized[:, i] = np.log1p(features[:, i])
+            elif scaler_type.get(col) == 'quantile':
+                qt = QuantileTransformer(output_distribution='normal')
+                features_normalized[:, i] = qt.fit_transform(features[:, i].reshape(-1, 1)).ravel()
+            else:
+                features_normalized[:, i] = features[:, i]  # No transformation
+                
+        return features_normalized
+    
+    raise ValueError("Invalid scaler_type. Must be 'standard', 'log', or dict mapping columns to scaling types")
+
+ 
+ 
+
+
 def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, 
-                                 distance_method='linear', distance_metric='haversine',
-                                 lat_col='latitude', lon_col='longitude', k_density=3, debug = False ):
+                                 distance_method='linear', distance_metric='euclidean',
+                                 lat_col='latitude', lon_col='longitude', k_density=3, debug = False, binary = True, 
+                                 scaler_type='all_standard', building_col = 'all_types_total_buildings'):   
     """
     Build a spatial neighbor graph considering both geographic proximity and feature similarity.
     
@@ -138,6 +187,11 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight,
         Names of latitude and longitude columns
     k_density : int
         Number of neighbors for density calculation
+    scaler_type: str or dict 
+        If 'all standard', use standard scaler on all vars 
+        If None - set uop default dict for avg gas and buildings 
+    building_col: str 
+        name of col of all counts of building 
     
     Returns:
     --------
@@ -169,9 +223,25 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight,
     if np.any(np.isnan(coords)) or np.any(np.isnan(features)):
         raise ValueError("Input contains NaN values")
     
+    # Set up feature scaling
+    if scaler_type is None:
+        print('mixing scalers')
+        scaler_type = {
+            building_col: 'log',
+            'avg_gas': 'standard'
+        }
+        # Extract and normalize features
+        features = df[feature_cols].values
+        features_normalized = normalize_features(features, feature_cols, scaler_type)
+        print('features normalized', features_normalized) 
+
     # Normalize features
-    scaler = StandardScaler()
-    features_normalized = scaler.fit_transform(features)
+    elif scaler_type=='all_standard': 
+        scaler = StandardScaler()
+        features_normalized = scaler.fit_transform(features)
+    else: 
+        features = df[feature_cols].values
+        features_normalized = normalize_features(features, feature_cols, scaler_type)
     
     # Calculate spatial distances
     if distance_metric == 'haversine':
@@ -203,7 +273,15 @@ def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight,
                                  include_self=False)
     
     # Make symmetric and binary
-    adj_matrix = (adj_matrix + adj_matrix.T > 0).astype(int)
+    # adj_matrix = (adj_matrix + adj_matrix.T > 0).astype(int)
+
+     # Make symmetric but preserve weights
+    adj_matrix = (adj_matrix + adj_matrix.T) / 2
+    
+    if binary:
+        # Only convert to binary if specifically requested
+        adj_matrix = (adj_matrix > 0).astype(int)
+    
     
     # Log graph statistics
     n_edges = adj_matrix.sum() // 2
