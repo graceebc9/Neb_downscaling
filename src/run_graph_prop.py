@@ -3,7 +3,7 @@ import logging
 import src.diffusion as diffusion 
 from src.metrics import calculate_metrics 
 
-def run_graph_prop(target_col, geo_df, percent_missing, adj, distance_metric, d_method, random_seed=42):
+def run_graph_prop(target_col, geo_df, percent_missing, adj, distance_metric, d_method, random_seed=42, setting='random', custom_config=None):
     """
     Run graph propagation algorithm with missing data.
     
@@ -28,16 +28,24 @@ def run_graph_prop(target_col, geo_df, percent_missing, adj, distance_metric, d_
     incomplete_postcode_data = og_data.copy()  
     
     logger.info('Generating mask')  
-    # Generate mask using percent_missing 
-    missing_mask = np.random.choice([0, 1], size=og_data.shape[0], 
+    
+    if setting =='random':
+        missing_mask = np.random.choice([0, 1], size=og_data.shape[0], 
                                   p=[percent_missing, 1-percent_missing])
     
-    # Validate that mask is correct number 
-    actual_missing_percent = 1 - (missing_mask.sum() / missing_mask.shape[0])
-    if abs(actual_missing_percent - percent_missing) > 0.01:  # 1% tolerance
-        logger.warning(f'Mask percentage deviation: Expected {percent_missing:.3f}, got {actual_missing_percent:.3f}')
+        # Validate that mask is correct number 
+        actual_missing_percent = 1 - (missing_mask.sum() / missing_mask.shape[0])
+        if abs(actual_missing_percent - percent_missing) > 0.01:  # 1% tolerance
+            logger.warning(f'Mask percentage deviation: Expected {percent_missing:.3f}, got {actual_missing_percent:.3f}')
+        
+        incomplete_postcode_data[missing_mask==0] = np.nan  
     
-    incomplete_postcode_data[missing_mask==0] = np.nan  
+    elif setting == 'seperate':
+        logger.info('trying seperate masks')
+        missing = geo_df[geo_df['ladcd'].isin(custom_config.testing_codes)].index
+        logger.info(f'Number of missing values: {len(missing)}')    
+        incomplete_postcode_data[missing] = np.nan 
+    
 
     if incomplete_postcode_data.ndim != 1:
         logger.error('Error: Unexpected dimensions in incomplete_postcode_data')
