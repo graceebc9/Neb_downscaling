@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import numpy as np 
 import hashlib 
+import os 
 
 def generate_run_name(experiment_params):
     """
@@ -27,6 +28,7 @@ def generate_run_name(experiment_params):
 
     # Convert all parameters to serializable format
     serializable_params = convert_to_serializable(experiment_params)
+    print('params: ', serializable_params) 
     
     # Sort the parameters to ensure consistent ordering
     param_str = json.dumps(serializable_params, sort_keys=True)
@@ -35,27 +37,27 @@ def generate_run_name(experiment_params):
     param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
     
     # Create a readable run name
-    run_name = f"run_{experiment_params['ld_cd']}_{param_hash}"
+    run_name = f"run_{experiment_params['name']}_{param_hash}"
     return run_name
 
-
-def save_results(results, run_name, prefix="checkpoint"):
+def save_results(results, run_name, prefix="checkpoint", op_folder='results'):
     """Save results both as JSON and CSV in run-specific directory"""
     logger = logging.getLogger(__name__)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Create results directory for this run
-    results_dir = Path(f"results/{run_name}")
-    results_dir.mkdir(parents=True, exist_ok=True)
+    # Create results directory for this run (using run_name as the directory)
+    results_dir = os.path.join(op_folder, run_name)
+    os.makedirs(results_dir, exist_ok=True)
     
     # Save as JSON
-    json_path = results_dir / f"results_{prefix}_{timestamp}.json"
+    json_path = os.path.join(results_dir, f"results_{prefix}_{timestamp}.json")
     with open(json_path, 'w') as f:
         json.dump(results, f, indent=2)
     
     # Save metadata about the run
-    metadata_path = results_dir / "run_metadata.json"
-    if not metadata_path.exists():
+    metadata_path = os.path.join(results_dir, "run_metadata.json")
+    
+    if not os.path.exists(metadata_path):
         metadata = {
             'run_name': run_name,
             'start_time': timestamp,
@@ -63,35 +65,20 @@ def save_results(results, run_name, prefix="checkpoint"):
         }
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
+    else:
+        # Update the last_update time in metadata
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        metadata['last_update'] = timestamp
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
     
     # Save as CSV
     df = pd.DataFrame(results)
-    csv_path = results_dir / f"results_{prefix}_{timestamp}.csv"
+    csv_path = os.path.join(results_dir, f"results_{prefix}_{timestamp}.csv")
     df.to_csv(csv_path, index=False)
     
     logger.info(f"Results saved to {json_path} and {csv_path}")
-
-
-# def save_interim_results(results, prefix="interim"):
-#     """Save results both as JSON and CSV for backup"""
-#     logger = logging.getLogger(__name__)
-#     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-#     # Create results directory if it doesn't exist
-#     Path("results_new").mkdir(exist_ok=True)
-    
-#     # Save as JSON
-#     json_path = f"results_new/results_{prefix}_{timestamp}.json"
-#     with open(json_path, 'w') as f:
-#         json.dump(results, f, indent=2)
-    
-#     # Save as CSV
-#     df = pd.DataFrame(results)
-#     csv_path = f"results_new/results_{prefix}_{timestamp}.csv"
-#     df.to_csv(csv_path, index=False)
-    
-#     logger.info(f"Results saved to {json_path} and {csv_path}")
-
 
 def create_analysis_dataframe(results):
     """Convert results to a pandas DataFrame with additional analysis"""
@@ -100,7 +87,10 @@ def create_analysis_dataframe(results):
     
     # Add some useful derived metrics
     df['experiment_id'] = range(len(df))
-    df['missing_percentage_str'] = df['missing_percentage'].apply(lambda x: f"{x*100:.0f}%")
+    try:
+        df['missing_percentage_str'] = df['missing_percentage'].apply(lambda x: f"{x*100:.0f}%")
+    except:
+        None 
     
     logger.info(f"Created analysis dataframe with {len(df)} rows")
     return df

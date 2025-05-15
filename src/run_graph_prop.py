@@ -15,6 +15,7 @@ def run_graph_prop(target_col, geo_df, percent_missing, adj, distance_metric, d_
         distance_metric: Distance metric used
         d_method; kind of distance method (linear or adaptive)
         random_seed: Random seed for reproducibility
+        setting: Method for missing data generation (random or seperate, if seperate we use the testing codes to split out )
     
     Returns:
         tuple: (rmse, mae, mape, r2) metrics
@@ -37,16 +38,16 @@ def run_graph_prop(target_col, geo_df, percent_missing, adj, distance_metric, d_
         actual_missing_percent = 1 - (missing_mask.sum() / missing_mask.shape[0])
         if abs(actual_missing_percent - percent_missing) > 0.01:  # 1% tolerance
             logger.warning(f'Mask percentage deviation: Expected {percent_missing:.3f}, got {actual_missing_percent:.3f}')
-        
-        incomplete_postcode_data[missing_mask==0] = np.nan  
-    
+
     elif setting == 'seperate':
         logger.info('trying seperate masks')
         missing = geo_df[geo_df['ladcd'].isin(custom_config.testing_codes)].index
+        missing_mask =  np.random.choice( [1], size = incomplete_postcode_data.shape)
+        missing_mask[missing] = 0 
         logger.info(f'Number of missing values: {len(missing)}')    
-        incomplete_postcode_data[missing] = np.nan 
     
-
+    incomplete_postcode_data[missing_mask==0] = np.nan  
+    
     if incomplete_postcode_data.ndim != 1:
         logger.error('Error: Unexpected dimensions in incomplete_postcode_data')
         raise ValueError('incomplete_postcode_data must be 1-dimensional')
