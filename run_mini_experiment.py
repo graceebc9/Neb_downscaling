@@ -9,11 +9,8 @@ import logging
 from pathlib import Path
 import time 
 import hashlib
-
-# def spatial_feature_neighbor_graph(df, k, feature_cols, spatial_weight, 
-#                                  distance_method='linear', distance_metric='haversine',
-#                                  lat_col='latitude', lon_col='longitude', k_density=3):
-    
+from src.cols import feature_cols 
+ 
 from src.get_graph import get_graph
 from src.run_graph_prop import run_graph_prop
 from src.feature_graph import spatial_feature_neighbor_graph 
@@ -73,7 +70,7 @@ def create_experiment_params(ld_cd, target_col='total_gas', feature_cols=None):
 
     return params
 
-def run_experiments(input_data, experiment_params, timeout_seconds=300):
+def run_experiments(input_data, experiment_params, timeout_seconds=3000):
     # Generate run name from parameters
     run_name = generate_run_name(experiment_params)
     logger = setup_logging(run_name)
@@ -206,11 +203,11 @@ if __name__ == "__main__":
     # Define experiment parameters
     # ld_cd = 'E06000060'
     # ld_cd='E06000052'
-    code='E08000025'
-    code = 'NW'
-    filt_type='region'
+    codes=['E08000025','E06000052'] 
+    code = 'E08000025_E06000052'
+    filt_type='ladcd'
     experiment_params = create_experiment_params(code)
-    hpc = False 
+    hpc = True 
     # Load data
     if hpc== True: 
         pc_path = '/home/gb669/rds/hpc-work/energy_map/data/postcode_polygons'
@@ -227,7 +224,7 @@ if __name__ == "__main__":
     df = pd.read_csv(df_path) 
     df = create_geo_df(df, pc_path, hpc )
     if filt_type == 'ladcd': 
-        geo_df = df[df['ladcd']==code].copy()
+        geo_df = df[df['ladcd'].isin(codes)].copy()
     elif filt_type =='region':
         geo_df = df[df['region']==code].copy()
     

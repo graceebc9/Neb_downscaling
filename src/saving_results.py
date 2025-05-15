@@ -27,6 +27,7 @@ def generate_run_name(experiment_params):
 
     # Convert all parameters to serializable format
     serializable_params = convert_to_serializable(experiment_params)
+    print('params: ', serializable_params) 
     
     # Sort the parameters to ensure consistent ordering
     param_str = json.dumps(serializable_params, sort_keys=True)
@@ -35,7 +36,7 @@ def generate_run_name(experiment_params):
     param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
     
     # Create a readable run name
-    run_name = f"run_{experiment_params['ld_cd']}_{param_hash}"
+    run_name = f"run_{experiment_params['name']}_{param_hash}"
     return run_name
 
 
@@ -100,7 +101,10 @@ def create_analysis_dataframe(results):
     
     # Add some useful derived metrics
     df['experiment_id'] = range(len(df))
-    df['missing_percentage_str'] = df['missing_percentage'].apply(lambda x: f"{x*100:.0f}%")
+    try:
+        df['missing_percentage_str'] = df['missing_percentage'].apply(lambda x: f"{x*100:.0f}%")
+    except:
+        None 
     
     logger.info(f"Created analysis dataframe with {len(df)} rows")
     return df

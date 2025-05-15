@@ -16,7 +16,7 @@ def load_geodf(nrows, hpc=False):
     geo_df['longitude'] = geo_df.geometry.centroid.x
     return geo_df
 
-def create_geo_df(df, pc_path='/Volumes/T9/2024_Data_downloads/codepoint_polygons_edina/Download_all_postcodes_2378998', hpc = False):
+def create_geo_df(df, pc_path='/Volumes/T9/2024_Data_downloads/codepoint_polygons_edina/Download_all_postcodes_2378998', hpc = True):
     pcs_load = df.postcode.str[0:2].unique().tolist()
     pcs_load = df.postcode.str.extract('([A-Z]+)').iloc[:,0].unique().tolist()
     if hpc:

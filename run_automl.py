@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 from autogluon.tabular import TabularDataset, TabularPredictor
+from src.cols import feature_cols
 
 def check_directory_and_files(output_directory, required_files):
     """
@@ -28,7 +29,7 @@ def check_directory_and_files(output_directory, required_files):
         return False
     
     return True
-
+    
 
 def transform(df, label, cols ):
     working_cols = cols + [label]
@@ -44,41 +45,48 @@ def save_results(results, output_path):
 
 
 def main():
-    cols =  ['avg_gas', 'all_types_total_buildings']
-    data_path = os.environ.get('DATA_PATH')
-    output_path = os.environ.get('OUTPUT_PATH')
-    model_preset= os.environ.get('MODEL_PRESET')
-    time_limit = int(os.environ.get('TIME_LIM'))
-    train_subset_prop = float(os.environ.get('TRAIN_SUBSET_PROP') )
-   
-    target = os.environ.get('TARGET')
-   
     
+    random_seed = int(os.environ.get('RANDOM_SEED'))
+    output_path = '/home/gb669/rds/hpc-work/energy_map/Neb_downscaling/results/automl'
+    time_limit = int(os.environ.get('TIME_LIM'))
+    model_preset = os.environ.get('MODEL_PRESET')
+    target = os.environ.get('TARGET')
     if target == 'totalelec':   
         label = 'total_elec'
     elif target == 'totalgas':
         label = 'total_gas'
     else:
-        raise Exception('No target')
-
+        label = 'total_gas'
     
     excl_models = []
     
 
+    cols = feature_cols
+    col_names='feature_cols'
+    feat=False 
     
+    data_path = '/home/gb669/rds/hpc-work/energy_map/data/automl_models/input_data/new_final/NEBULA_englandwales_domestic_filtered.csv'
     df = pd.read_csv(data_path)   
     dataset_name = os.path.basename(data_path).split('.')[0].split('_tr')[0]
+    
+    filt_type = 'ladcd'
+    loc_type= filt_type
+    codes=['E08000025','E06000052'] 
+    code = 'E08000025_E06000052'
+    if filt_type == 'ladcd': 
+        df = df[df['ladcd'].isin(codes)].copy()
+    elif filt_type =='region':
+        df = df[df['region']==code].copy()
 
-    loc_type= 'global'
-    region_id= None
-    train_data, test_data = train_test_split(df, test_size=0.2, random_state=42)
+    
+    train_data, test_data = train_test_split(df, test_size=0.2, random_state=random_seed)
     train_data = transform(TabularDataset(train_data), label, cols)
         
-    print(f'starting model run for {loc_type} target {label}, time lim {time_limit}, model preset {model_preset} and train subset {train_subset_prop}' )
+    print(f'starting model run for {loc_type} target {label}, time lim {time_limit}, model preset {model_preset} and rs {random_seed}' )
 
 
     
-    output_directory = f"{output_path}/{dataset_name}__{loc_type}__{label}__{time_limit}__{model_preset}___tsp_{train_subset_prop}"
+    output_directory = f"{output_path}/{dataset_name}__{loc_type}__{label}__{time_limit}__{model_preset}___rs_{random_seed}_code_{code}_cols_{col_names}"
     required_files = ['model_summary.txt']  # List of files you expect to exist
     
     
@@ -92,13 +100,9 @@ def main():
         print(f"Directory {output_directory} is ready for use.")
 
     
-    # Reduce the training dataset if needed
-    if train_subset_prop != 1:
-        train_subset, _ = train_test_split(train_data, test_size=1-train_subset_prop, random_state=42)
-        # train_subset.to_csv(os.path.join(output_directory, 'train_subset.csv'), index=False)
-    else:
+ 
         
-        train_subset = train_data   
+    train_subset = train_data   
     size_train = len(train_subset) 
     predictor = TabularPredictor(label, path=output_directory).fit(train_subset, 
                                                                 time_limit=time_limit,
