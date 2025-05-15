@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-
+import os 
 import json 
 
 from datetime import datetime
@@ -34,12 +34,12 @@ def save_config(custom_config, output_path):
     
     with open(f'{output_path}/custom_config.json', 'w') as f:
         json.dump(config_dict, f, indent=4)
-        
-def run_graph_experiments(input_data, config, timeout_seconds=400):
+              
+def run_graph_experiments(input_data, config, timeout_seconds=400, op_folder='resultssss'):
     run_name = config.region_name 
     logger = setup_logging(run_name)
     # Load checkpoint if it exists
-    previous_results, completed_experiments = load_checkpoint(run_name)
+    previous_results, completed_experiments = load_checkpoint(run_name, op_folder)
     all_results = previous_results if previous_results else []
 
         # Create experiment combinations
@@ -51,17 +51,15 @@ def run_graph_experiments(input_data, config, timeout_seconds=400):
         config.spatial_weight  , 
         config.missing_data_percent
     ))
-    logger.info('param combos to run:')
-    logger.info(param_combinations)   
+    print(param_combinations)   
     param_combinations = [
         params for params in param_combinations 
         if params not in completed_experiments
     ]
-    logger.info('Config is:' )
-    logger.info(str(config ) )
+
     total_experiments = len(param_combinations)
     logger.info(f"Starting experiments. Remaining combinations to run: {total_experiments}")
-    logger.info(f"Input data shape: {input_data.shape}")
+    logger.debug(f"Input data shape: {input_data.shape}")
       
     # Base feature parameters
     base_params = {
@@ -72,7 +70,7 @@ def run_graph_experiments(input_data, config, timeout_seconds=400):
     try:
         for index, (rs, k, dist_metric, distance_method, weight, missing_data_percent) in enumerate(param_combinations, 1):
             start_time = time.time()
-            logger.info(f"Experiment {index}/{total_experiments} ({(index/total_experiments)*100:.1f}%)")
+            logger.debug(f"Experiment {index}/{total_experiments} ({(index/total_experiments)*100:.1f}%)")
             
             
             # Update feature parameters
@@ -128,15 +126,15 @@ def run_graph_experiments(input_data, config, timeout_seconds=400):
                         'execution_time': time.time() - start_time
                     }
                     
-                    logger.info(f"Results - RMSE: {rmse:.4f}, MAE: {mae:.4f}, MAPE: {mape:.4f}, R2: {r2:.4f}")
+                    logger.debug(f"Results - RMSE: {rmse:.4f}, MAE: {mae:.4f}, MAPE: {mape:.4f}, R2: {r2:.4f}")
                     
                     # Add to results list
                     all_results.append(result)
                     
                     # Save checkpoint every 10 experiments
                     if len(all_results) % 10 == 0:
-                        logger.info(f"Saving checkpoint after {len(all_results)} experiments...")
-                        save_results(all_results, run_name)
+                        logger.debug(f"Saving checkpoint after {len(all_results)} experiments...")
+                        save_results(all_results, run_name,  prefix="checkpoint" , op_folder=op_folder)
                     
             except (TimeoutException, Exception) as e:
                 logger.error(f"Error in experiment: {str(e)}", exc_info=True)
@@ -151,12 +149,12 @@ def run_graph_experiments(input_data, config, timeout_seconds=400):
                 
     except KeyboardInterrupt:
         logger.info("Experiment interrupted by user. Saving current progress...")
-        save_results(all_results, run_name, prefix="interrupt")
+        save_results(all_results, run_name, prefix="interrupt", op_folder= op_folder)
         raise
         
     logger.info("All experiments completed!")
     # Save final results
-    save_results(all_results, run_name, prefix="final")
+    save_results(all_results, run_name, prefix="final", op_folder= op_folder)
     
     return all_results, run_name
     
@@ -343,15 +341,14 @@ def load_data(custom_config, df_path, pc_path):
     geo_df = create_geo_df(df, pc_path)
     return geo_df 
     
-def run_graph_config(geo_df, custom_config): 
-    results, run_name  = run_graph_experiments(geo_df.fillna(0), custom_config )
-    save_config(custom_config, f"results/{run_name}" )
+
+
+def run_graph_config(geo_df, custom_config, output_path='results_new'): 
+    results, run_name  = run_graph_experiments(geo_df.fillna(0), custom_config , op_folder=output_path) 
+    op_path  = os.path.join(output_path, run_name)
+    save_config(custom_config, op_path )
     analysis_df = create_analysis_dataframe(results)
-    plot_metrics_analysis(analysis_df, Path(f"results/{run_name}/results_graph_rmse_R2.png") ,custom_config.region_name ) 
-    processed_path = Path(f"results/{run_name}/processed_results.csv")
+    plot_metrics_analysis(analysis_df, os.path.join( op_path, 'results_graph_rmse_R2.png')  , custom_config.region_name )
+    processed_path = os.path.join(op_path,   "processed_results.csv")
     analysis_df.to_csv(processed_path, index=False)
-    return Path(f"results/{run_name}" ) 
-    
- 
-
-
+    return op_path
